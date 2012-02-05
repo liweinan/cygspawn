@@ -665,7 +665,7 @@ wchar_t *getpexe(DWORD pid)
     return pp;
 }
 
-static const wchar_t *getcygroot(void)
+static wchar_t *getcygroot(void)
 {
     wchar_t *r;
 
@@ -682,12 +682,8 @@ static const wchar_t *getcygroot(void)
         }
     }
     if (r == 0) {
-        if (_waccess(L"C:\\cygwin\\bin\\bash.exe", 0) == 0) {
+        if (_waccess(L"C:\\cygwin\\bin\\bash.exe", 0) == 0)
             r = xwcsdup(L"C:\\cygwin");
-            if (drive != 0)
-                *drive = L'C';
-            return r;
-        }
     }
     return r;
 }
