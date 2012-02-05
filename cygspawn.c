@@ -665,20 +665,16 @@ wchar_t *getpexe(DWORD pid)
     return pp;
 }
 
-static const wchar_t *getcygroot(wchar_t *drive)
+static const wchar_t *getcygroot(void)
 {
     wchar_t *r;
 
-    if (cygroot != 0)
-        return cygroot;
     if ((r = xgetenv(L"CYGWIN_ROOT")) == 0) {
         r = getpexe(GetCurrentProcessId());
         if (r != 0) {
             int x;
             if (wchrimatch(r, L"*\\cygwin\\*", &x) == 0) {
                 r[x + 7] = L'\0';
-                if (drive != 0)
-                    *drive = towupper(*r);
                 return r;
             }
             xfree(r);
@@ -693,31 +689,25 @@ static const wchar_t *getcygroot(wchar_t *drive)
             return r;
         }
     }
-    else {
-        wchar_t *p = r;
-        if (drive != 0)
-            *drive = towupper(*r);
-        while (*p != L'\0') {
-            if (*p == L'/')
-                *p = L'\\';
-            ++p;
-        }
-    }
     return r;
 }
 
 /**
  * Load our cygwin DLL or return FALSE on failure.
  */
-static HANDLE load_cygwin_library(const wchar_t *root)
+static HANDLE load_cygwin_library(void)
 {
     HANDLE hCygwin = 0;
     if ((hCygwin = GetModuleHandleW(cyglibrary)) == NULL) {
         if ((hCygwin = LoadLibraryW(cyglibrary)) == NULL) {
-            wchar_t *rbin = xwcsvcat(root, L"\\bin", 0);
-            SetDllDirectoryW(rbin);
-            hCygwin = LoadLibraryW(cyglibrary);
-            xfree(rbin);
+            wchar_t *root = getcygroot();
+            if (root != 0) {
+                wchar_t *rbin = xwcsvcat(getcygroot(), L"\\bin", 0);
+                SetDllDirectoryW(rbin);
+                hCygwin = LoadLibraryW(cyglibrary);
+                xfree(rbin);
+            }
+            xfree(root);
         }
     }
     return hCygwin;
@@ -892,13 +882,13 @@ static BOOL enumerate_cygroot(void)
  * Load our cygwin DLL, allocate our pathmatches array and cygroot,
  * and resolve appropriate paths and patterns.
  */
-static BOOL setup_context(const wchar_t *root)
+static BOOL setup_context(void)
 {
     HMODULE hCygwin = NULL;
 
     /* Load the cygwin dll into our application.
      */
-    if ((hCygwin = load_cygwin_library(root)) == 0)
+    if ((hCygwin = load_cygwin_library()) == 0)
         return FALSE;
 
     /* Init the cygwin environment. (Required)
@@ -928,7 +918,7 @@ static BOOL setup_context(const wchar_t *root)
 /**
  * Free up all the memory allocated in setup_context.
  */
-static void finalize_context()
+static void finalize_context(void)
 {
     if (debug) {
         if (pathmatches != 0) {
@@ -950,7 +940,7 @@ static int cygspawn(int argc, wchar_t **wargv, int envc, wchar_t **wenvp)
     intptr_t rp;
     wchar_t *p;
 
-    if (!setup_context(getcygroot(windrive))) {
+    if (!setup_context()) {
         finalize_context();
 #if defined(_WIN64)
         if (cygroot != 0)
