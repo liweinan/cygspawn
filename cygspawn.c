@@ -830,7 +830,7 @@ static BOOL enumerate_cygroot(void)
 
     /* Allocate our pattern list. +1 = "/proc/*" (which isn't a folder)
      */
-    pathmatches = waalloc(childItems+1);
+    pathmatches = waalloc(childItems + 3);
     /* Open find handle and make sure it's a valid handle.
      */
     if ((hFind = FindFirstFileW(findPattern, &dataFind)) == INVALID_HANDLE_VALUE) {
@@ -839,6 +839,7 @@ static BOOL enumerate_cygroot(void)
         _exit(EXIT_FAILURE);
     }
 
+    pathmatches[i++] = xwcsdup(L"/cygdrive/?/*");
     do {
         /* Don't include . or ..
          */
