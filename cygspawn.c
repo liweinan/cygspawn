@@ -69,8 +69,8 @@ static const char aslicense[] = ""                                          \
 
 static const wchar_t *cyglibrary = L"cygwin1.dll";
 static const wchar_t *cygroot = 0;
-static wchar_t  windrive[] = { 0, L':', L'\\', 0};
-static const wchar_t **pathmatches = 0;
+static wchar_t   windrive[] = { 0, L':', L'\\', 0};
+static wchar_t **pathmatches = 0;
 
 /**
  * Typedefs taken from Python for defining ssize_t on MSVC
@@ -78,7 +78,7 @@ static const wchar_t **pathmatches = 0;
 #ifdef _WIN64
 typedef __int64 ssize_t;
 #else
-typedef _W64 int ssize_t;
+typedef int     ssize_t;
 #endif
 
 /**
@@ -91,13 +91,13 @@ typedef void (*cygwin_dll_init_fn)();
  */
 enum
 {
-    CCP_POSIX_TO_WIN_A = 0, /* from is char*, to is char*       */
+    CCP_POSIX_TO_WIN_A = 0,  /* from is char*, to is char*       */
     CCP_POSIX_TO_WIN_W,      /* from is char*, to is wchar_t*    */
     CCP_WIN_A_TO_POSIX,      /* from is char*, to is char*       */
     CCP_WIN_W_TO_POSIX,      /* from is wchar_t*, to is char*    */
 
     /* Or these values to the above as needed. */
-    CCP_ABSOLUTE = 0,      /* Request absolute path (default). */
+    CCP_ABSOLUTE = 0,       /* Request absolute path (default). */
     CCP_RELATIVE = 0x100    /* Request to keep path relative.   */
 };
 
@@ -201,7 +201,7 @@ static __inline void xfree(void *m)
  */
 static __inline BOOL isfolder(DWORD attr)
 {
-    return attr & FILE_ATTRIBUTE_DIRECTORY;
+    return (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
 static void wafree(wchar_t **array)
@@ -709,12 +709,18 @@ static const wchar_t *getcygroot(wchar_t *drive)
 /**
  * Load our cygwin DLL or return FALSE on failure.
  */
-static BOOL load_cygwin_library(HMODULE* hCygwin)
+static HANDLE load_cygwin_library(const wchar_t *root)
 {
-    if((*hCygwin = GetModuleHandleW(cyglibrary)) == NULL)
-        if((*hCygwin = LoadLibraryW(cyglibrary)) == NULL)
-            return FALSE;
-    return TRUE;
+    HANDLE hCygwin = 0;
+    if ((hCygwin = GetModuleHandleW(cyglibrary)) == NULL) {
+        if ((hCygwin = LoadLibraryW(cyglibrary)) == NULL) {
+            wchar_t *rbin = xwcsvcat(root, L"\\bin", 0);
+            SetDllDirectoryW(rbin);
+            hCygwin = LoadLibraryW(cyglibrary);
+            xfree(rbin);
+        }
+    }
+    return hCygwin;
 }
 
 /**
@@ -723,7 +729,7 @@ static BOOL load_cygwin_library(HMODULE* hCygwin)
 static BOOL init_cygwin_library(HMODULE hCygwin)
 {
     cygwin_dll_init_fn cygwin_dll_init = NULL;
-    if((cygwin_dll_init = (cygwin_dll_init_fn)GetProcAddress(hCygwin,"cygwin_dll_init")) == NULL) {
+    if ((cygwin_dll_init = (cygwin_dll_init_fn)GetProcAddress(hCygwin,"cygwin_dll_init")) == NULL) {
         FreeLibrary(hCygwin);
         return FALSE;
     }
@@ -737,43 +743,50 @@ static BOOL init_cygwin_library(HMODULE hCygwin)
  */
 static BOOL resolve_cygroot(HMODULE hCygwin)
 {
-    // Our root folder. Needs to be a char array, rather than a wchar_t array.
-    const void* posixPath = "/";
-    
-    // Our functions
-    cygwin_create_path_fn cygwin_create_path = NULL;
-    cygwin_conv_path_fn cygwin_conv_path = NULL;
-    
-    // Assign the functions we'll be using to their exports.
+    /* Our root folder. Needs to be a char array, rather than a wchar_t array.
+     */
+    const void *posixPath = "/";
+
+    /* Our functions */
+    cygwin_create_path_fn cygwin_create_path;
+    cygwin_conv_path_fn cygwin_conv_path;
+
+    /* Assign the functions we'll be using to their exports.
+     */
     cygwin_conv_path = (cygwin_conv_path_fn)GetProcAddress(hCygwin, "cygwin_conv_path");
     cygwin_create_path = (cygwin_create_path_fn)GetProcAddress(hCygwin, "cygwin_create_path");
-    
-    // Verify that our functions are valid exports.
-    if((cygwin_conv_path == NULL) || (cygwin_create_path == NULL)) {
+
+    /* Verify that our functions are valid exports.
+     */
+    if ((cygwin_conv_path == NULL) || (cygwin_create_path == NULL)) {
         FreeLibrary(hCygwin);
         return FALSE;
     }
-    
-    // Use built-in function to allocate our root path buffer.
+
+    /* Use built-in function to allocate our root path buffer.
+     */
     cygroot = (const wchar_t*)cygwin_create_path(CCP_POSIX_TO_WIN_W, posixPath);
-    if(cygroot == NULL) {
+    if (cygroot == NULL) {
         FreeLibrary(hCygwin);
         return FALSE;
     }
-    
-    // Since cygwin allocated our buffer, we can assume it's big enough to hold the output.
-    if(cygwin_conv_path(CCP_POSIX_TO_WIN_W, posixPath, (void*)cygroot, _MAX_PATH) == -1) {
+
+    /* Since cygwin allocated our buffer, we can assume it's big enough to hold the output.
+     */
+    if (cygwin_conv_path(CCP_POSIX_TO_WIN_W, posixPath, (void*)cygroot, _MAX_PATH) == -1) {
         FreeLibrary(hCygwin);
         return FALSE;
     }
-    
-    // Verify that the cygroot buffer is good.
-    if(*cygroot == L'\0') {
+
+    /* Verify that the cygroot buffer is good.
+     */
+    if (*cygroot == L'\0') {
         FreeLibrary(hCygwin);
         return FALSE;
     }
-    
-    // And finally, verify that our folder exists. Inverted to return 0 on success.
+
+    /* And finally, verify that our folder exists. Inverted to return 0 on success.
+     */
     return isfolder(GetFileAttributesW(cygroot));
 }
 
@@ -784,119 +797,93 @@ static BOOL resolve_cygroot(HMODULE hCygwin)
  * in a folder, so unfortunately the function loops through the children
  * twice: First to establish a count, and then again to build the list.
  */
-static BOOL enumerate_cygroot()
+static BOOL enumerate_cygroot(void)
 {
     WIN32_FIND_DATAW dataFind;
     HANDLE hFind = INVALID_HANDLE_VALUE;
     wchar_t* findPattern = NULL;
-    size_t patternLen;
-    size_t rootLen;
     DWORD dwError;
     size_t childItems = 0;
     int i = 0;
 
-    // Get cygroot length for later use.
-    rootLen = lstrlenW(cygroot);
-    
-    // len(cygroot) + len("\\*") + \0
-    patternLen = (rootLen + 3) * sizeof(wchar_t);
-    
-    // allocate our buffer. fatal error if we can't.
-    if((findPattern = (wchar_t*)malloc(patternLen)) == NULL) {
-        _wperror(L"malloc");
-        _exit(EXIT_FAILURE);
-    }
-    
-    // zero out our pattern buffer.
-    memset((void*)findPattern, 0, patternLen);
-    wcsncpy(findPattern, cygroot, rootLen);
-    wcsncat(findPattern, L"\\*", 3);
-    
-    // Open find handle and make sure it's a valid handle.
-    if((hFind = FindFirstFileW(findPattern, &dataFind)) == INVALID_HANDLE_VALUE) {
+    findPattern = xwcsvcat(cygroot, L"\\*", 0);
+    /* Open find handle and make sure it's a valid handle.
+     */
+    if ((hFind = FindFirstFileW(findPattern, &dataFind)) == INVALID_HANDLE_VALUE) {
         free(findPattern);
         _wperror(L"Cannot enumerate cygroot folder.");
         _exit(EXIT_FAILURE);
     }
-    
+
     do {
-        // Don't include . or ..
-        if((dataFind.cFileName[0] == L'.') && (dataFind.cFileName[1] == L'\0')) continue;
-        if((dataFind.cFileName[0] == L'.') && (dataFind.cFileName[1] == L'.') && (dataFind.cFileName[2] == L'\0')) continue;
-        
-        // Add to our child count.
-        childItems++;
-    } while(FindNextFileW(hFind, &dataFind) != 0);
-    
-    // Get last error and close our find handle.
+        /* Don't include . or ..
+         */
+        if ((dataFind.cFileName[0] == L'.') && (dataFind.cFileName[1] == L'\0'))
+            continue;
+        if ((dataFind.cFileName[0] == L'.') && (dataFind.cFileName[1] == L'.') && (dataFind.cFileName[2] == L'\0'))
+            continue;
+
+        /* Add to our child count.
+         */
+        if (isfolder(dataFind.dwFileAttributes))
+            childItems++;
+    } while (FindNextFileW(hFind, &dataFind) != 0);
+
+    /* Get last error and close our find handle.
+     */
     dwError = GetLastError();
     FindClose(hFind);
-    
-    // We need to check to make sure the error specified is ERROR_NO_MORE_FILES
+
+    /* We need to check to make sure the error specified is ERROR_NO_MORE_FILES
+     */
     if (dwError != ERROR_NO_MORE_FILES) {
         free(findPattern);
         wprintf(L"FindNextFile error. Error is %u\n", dwError);
         _exit(EXIT_FAILURE);
     }
-    
-    // Allocate our pattern list. +1 = "/proc/*" (which isn't a folder)
-    pathmatches = (const wchar_t**)waalloc(childItems+1);
-    
-    //memset((void*)pathmatches, 0, (childItems+1) * sizeof(wchar_t*));
-    // Open find handle and make sure it's a valid handle.
-    if((hFind = FindFirstFileW(findPattern, &dataFind)) == INVALID_HANDLE_VALUE) {
+
+    /* Allocate our pattern list. +1 = "/proc/*" (which isn't a folder)
+     */
+    pathmatches = waalloc(childItems+1);
+    /* Open find handle and make sure it's a valid handle.
+     */
+    if ((hFind = FindFirstFileW(findPattern, &dataFind)) == INVALID_HANDLE_VALUE) {
         free(findPattern);
         _wperror(L"Cannot enumerate cygroot folder.. again.");
         _exit(EXIT_FAILURE);
     }
-    
+
     do {
-        // Don't include . or ..
-        if((dataFind.cFileName[0] == L'.') && (dataFind.cFileName[1] == L'\0')) continue;
-        if((dataFind.cFileName[0] == L'.') && (dataFind.cFileName[1] == L'.') && (dataFind.cFileName[2] == L'\0')) continue;
-        
-        // And now we can add an item to our pattern list.
-        if(isfolder(dataFind.dwFileAttributes)) {
-            // len("/") + len(dataFind.cFileName) + len("/*") + \0
-            patternLen = (lstrlenW(dataFind.cFileName) + 4) * sizeof(const wchar_t);
-            if((pathmatches[i] = (const wchar_t*)malloc(patternLen)) == NULL) {
-                _wperror(L"malloc");
-                _exit(EXIT_FAILURE);
-            }
-            memset((void*)pathmatches[i], 0, patternLen);
-            swprintf((wchar_t*)pathmatches[i], patternLen, L"/%s/*", dataFind.cFileName);
-        } else {
-            // len("/") + len(dataFind.cFileName) + \0
-            patternLen = (lstrlenW(dataFind.cFileName) + 2) * sizeof(const wchar_t);
-            if((pathmatches[i] = (const wchar_t*)malloc(patternLen)) == NULL) {
-                _wperror(L"malloc");
-                _exit(EXIT_FAILURE);
-            }
-            memset((void*)pathmatches[i], 0, patternLen);
-            swprintf((wchar_t*)pathmatches[i], patternLen, L"/%s", dataFind.cFileName);
+        /* Don't include . or ..
+         */
+        if ((dataFind.cFileName[0] == L'.') && (dataFind.cFileName[1] == L'\0'))
+            continue;
+        if ((dataFind.cFileName[0] == L'.') && (dataFind.cFileName[1] == L'.') && (dataFind.cFileName[2] == L'\0'))
+            continue;
+
+        /* And now we can add an item to our pattern list.
+         */
+        if (isfolder(dataFind.dwFileAttributes)) {
+            /* Add only folders
+             * XXX: Charles Grunwald's patch added files as well.
+             *      Check why!
+             */
+            pathmatches[i++] = xwcsvcat(L"/", dataFind.cFileName, L"/*", 0);
         }
-        i++;
-    } while(FindNextFileW(hFind, &dataFind) != 0);
-    
-    // We need to check to make sure the error specified is ERROR_NO_MORE_FILES
+    } while (FindNextFileW(hFind, &dataFind) != 0);
+
+    /* We need to check to make sure the error specified is ERROR_NO_MORE_FILES
+     */
     dwError = GetLastError();
     FindClose(hFind);
-    free(findPattern);
-    
+    xfree(findPattern);
+
     if (dwError != ERROR_NO_MORE_FILES) {
         wprintf(L"FindNextFile error. Error is %u\n", dwError);
         _exit(EXIT_FAILURE);
     }
-    
-    // len("/proc/*") + \0
-    patternLen = 8 * sizeof(wchar_t);
-    if((pathmatches[i] = (wchar_t*)malloc(patternLen)) == NULL) {
-        _wperror(L"malloc");
-        _exit(EXIT_FAILURE);
-    }
-    memset((void*)pathmatches[i], 0, patternLen);
-    wcsncpy((wchar_t*)pathmatches[i], L"/proc/*", 8);
-    i++;
+
+    pathmatches[i++] = xwcsdup(L"/proc/*");
     pathmatches[i] = NULL;
     return TRUE;
 }
@@ -905,30 +892,36 @@ static BOOL enumerate_cygroot()
  * Load our cygwin DLL, allocate our pathmatches array and cygroot,
  * and resolve appropriate paths and patterns.
  */
-static BOOL setup_context()
+static BOOL setup_context(const wchar_t *root)
 {
     HMODULE hCygwin = NULL;
-    
-    // Load the cygwin dll into our application.
-    if(!load_cygwin_library(&hCygwin))
+
+    /* Load the cygwin dll into our application.
+     */
+    if ((hCygwin = load_cygwin_library(root)) == 0)
         return FALSE;
-    
-    // Init the cygwin environment. (Required)
-    if(!init_cygwin_library(hCygwin))
+
+    /* Init the cygwin environment. (Required)
+     */
+    if (!init_cygwin_library(hCygwin))
         return FALSE;
-    
-    // Use exported cygwin functions to resolve our root.
-    if(!resolve_cygroot(hCygwin))
+
+    /* Use exported cygwin functions to resolve our root.
+     */
+    if (!resolve_cygroot(hCygwin))
         return FALSE;
-    
-    // We wont be using cygwin's dll anymore, so we can unload it.
+
+    /* We wont be using cygwin's dll anymore, so we can unload it.
+     */
     FreeLibrary(hCygwin);
-    
-    // Finally, get all child elements of the root folder and build our
-    // pathmatches pattern array.
-    if(!enumerate_cygroot())
+
+    /* Finally, get all child elements of the root folder and build our
+     * pathmatches pattern array.
+     */
+    if (!enumerate_cygroot())
         return FALSE;
-    
+    if (cygroot != 0)
+        windrive[0] = towupper(cygroot[0]);
     return TRUE;
 }
 
@@ -937,21 +930,18 @@ static BOOL setup_context()
  */
 static void finalize_context()
 {
-    int i = 0;
-    
-    if(pathmatches != 0) {
-        if (debug)
+    if (debug) {
+        if (pathmatches != 0) {
+            int i = 0;
             wprintf(L"\nPatterns:\n");
-        while(pathmatches[i] != NULL) {
-            if(debug)
-                wprintf(L"     [%d] : %s\n", i, pathmatches[i]);
-            free((void*)pathmatches[i]);
-            i++;
+            while (pathmatches[i] != NULL) {
+                wprintf(L"[%2d] : %s\n", i, pathmatches[i]);
+                i++;
+            }
         }
-        free((void*)pathmatches);
+        wprintf(L"\nCygroot:\n%s\n", cygroot);
     }
-    
-    if((cygroot != 0) && debug) wprintf(L"\nCygroot : %s\n", cygroot);
+    wafree(pathmatches);
 }
 
 static int cygspawn(int argc, wchar_t **wargv, int envc, wchar_t **wenvp)
@@ -960,10 +950,14 @@ static int cygspawn(int argc, wchar_t **wargv, int envc, wchar_t **wenvp)
     intptr_t rp;
     wchar_t *p;
 
-    //if ((cygroot = getcygroot(windrive)) == 0) {
-    if (!setup_context()) {
+    if (!setup_context(getcygroot(windrive))) {
         finalize_context();
-        fprintf(stderr, "cannot find Cygwin root\n");
+#if defined(_WIN64)
+        if (cygroot != 0)
+            fprintf(stderr, "Cannot find 64-bit cygiwn-1.dll inside %S\\bin\n", cygroot);
+        else
+#endif
+        fprintf(stderr, "Cannot find Cygwin root\n");
         return 1;
     }
     if (debug)

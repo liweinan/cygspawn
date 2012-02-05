@@ -27,11 +27,13 @@ if /i "%~1" == "/gui" (
 )
 if /i "%~1" == "/x64" (
     set "MACHINE=X64"
-    set "CFLAGS=-DWIN64 -D_WIN64 -W3 %CFLAGS%"
+    set "CFLAGS=/DWIN64 /W3 %CFLAGS%"
+    set "RCOPTS=/d WIN64 /d _WIN64 %RCOPTS%"
 ) else (
     set "MACHINE=X86"
-    set "CFLAGS=-W3 %CFLAGS%"
+    set "CFLAGS=/W3 %CFLAGS%"
 )
-cl -MD -DWIN32 -D_WIN32 %CFLAGS% -DUNICODE -D_UNICODE -D%SUBSYTEM% -c cygspawn.c
-rc /l 0x409 /d "NDEBUG" %RCFLAGS% cygspawn.rc
-link /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:%SUBSYTEM% /MACHINE:%MACHINE% %LDFLAGS% cygspawn.obj cygspawn.res kernel32.lib psapi.lib %EXTRA_LIBS% /OUT:%OUTFILE%
+cl /nologo /TC /O2 /Ob2 /Zi /MD /DWIN32 %CFLAGS% /DUNICODE /D_UNICODE /D%SUBSYTEM% /c cygspawn.c /Fdcygspawn
+rc /l 0x409 /d "NDEBUG" %RCOPTS% cygspawn.rc
+link /NOLOGO /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:%SUBSYTEM% /MACHINE:%MACHINE% %LDFLAGS% cygspawn.obj cygspawn.res kernel32.lib psapi.lib %EXTRA_LIBS% /pdb:cygspwn.pdb /OUT:%OUTFILE%
+@if exist cygspwn.exe.manifest mt -nologo -manifest cygspwn.exe.manifest -outputresource:cygspwn.exe;1
