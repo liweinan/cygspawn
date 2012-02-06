@@ -1,4 +1,4 @@
-/* Copyright (c) 2011 The MyoMake Project <http://www.myomake.org>
+/* Copyright (c) 2012 The MyoMake Project <http://www.myomake.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@
   "limitations under the License."
 
 #define STR_COPYRIGHT \
-  "Copyright © 2011 The MyoMake Project <http://www.myomake.org>.\r\n"         \
+  "Copyright © 2012 The MyoMake Project <http://www.myomake.org>.\r\n"         \
   "See the NOTICE file distributed with this work for additional "             \
   "information regarding copyright ownership."
 
