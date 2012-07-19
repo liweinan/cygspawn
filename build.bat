@@ -35,5 +35,5 @@ if /i "%~1" == "/x64" (
 )
 cl /nologo /TC /O2 /Ob2 /Zi /MD /DWIN32 %CFLAGS% /DUNICODE /D_UNICODE /D%SUBSYTEM% /c cygspawn.c /Fdcygspawn
 rc /l 0x409 /d "NDEBUG" %RCOPTS% cygspawn.rc
-link /NOLOGO /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:%SUBSYTEM% /MACHINE:%MACHINE% %LDFLAGS% cygspawn.obj cygspawn.res kernel32.lib psapi.lib %EXTRA_LIBS% /pdb:cygspwn.pdb /OUT:%OUTFILE%
-@if exist cygspwn.exe.manifest mt -nologo -manifest cygspwn.exe.manifest -outputresource:cygspwn.exe;1
+link /NOLOGO /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:%SUBSYTEM% /MACHINE:%MACHINE% %LDFLAGS% cygspawn.obj cygspawn.res kernel32.lib psapi.lib %EXTRA_LIBS% /pdb:cygspawn.pdb /OUT:%OUTFILE%
+@if exist cygspawn.exe.manifest mt -nologo -manifest cygspawn.exe.manifest -outputresource:cygspawn.exe;1
