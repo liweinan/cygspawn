@@ -941,7 +941,7 @@ static int cygspawn(int argc, wchar_t **wargv, int envc, wchar_t **wenvp)
         finalize_context();
 #if defined(_WIN64)
         if (cygroot != 0)
-            fprintf(stderr, "Cannot find 64-bit cygiwn-1.dll inside %S\\bin\n", cygroot);
+            fprintf(stderr, "Cannot find 64-bit cygwin-1.dll inside %S\\bin\n", cygroot);
         else
 #endif
         fprintf(stderr, "Cannot find Cygwin root\n");
